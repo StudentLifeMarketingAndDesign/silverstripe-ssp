@@ -24,7 +24,7 @@
 		"simplesamlphp/xmlseclibs": "1.3.2",
 		"simplesamlphp/simplesamlphp": "dev-md"
 	},
-	"repositories": [
+	"repositories": [ 
         {
             "type": "vcs",
             "url": "https://github.com/StudentLifeMarketingAndDesign/silverstripe-ssp"       
