@@ -1,6 +1,6 @@
 <?php
 /**
- * Replaces the default Silverstripe {@link Security} class for dealing with SimpleSAMLphp
+ * Replaces the default SilverStripe {@link Security} class for dealing with SimpleSAMLphp
  * authentication
  * 
  * @package silverstripe-ssp
@@ -16,7 +16,7 @@ class SSPSecurity extends Controller {
     
     /**
      * Use this authenticator as the default when an authentication source isn't specified.
-     * Authenticators can be Silverstripe environment specific
+     * Authenticators can be SilverStripe environment specific
      * @var mixed
      */
     private static $default_authenticator;
@@ -29,7 +29,7 @@ class SSPSecurity extends Controller {
     private static $default_logged_in_url;
 
     /**
-     * Replace the default Silverstripe Security class
+     * Replace the default SilverStripe Security class
      * @var boolean
      */
     private static $enable_ssp_auth = true;
@@ -54,20 +54,22 @@ class SSPSecurity extends Controller {
 
         // Prevent clickjacking, see https://developer.mozilla.org/en-US/docs/HTTP/X-Frame-Options
         $this->response->addHeader('X-Frame-Options', 'SAMEORIGIN');
+        
+        $this->extend('onAfterInit');
     }
 
     public function index() {
-        $this->forceSSL();
+        self::force_ssl();
         
         return $this->redirect(BASE_URL . 'simplesaml/module.php/core/frontpage_welcome.php');
     }
     
     /**
-     * Log the current user into the identity provider, and then Silverstripe
+     * Log the current user into the identity provider, and then SilverStripe
      * @see SimpleSAML_Auth_Simple->login()
      */
     public function login() {
-        $this->forceSSL();
+        self::force_ssl();
         
         if(isset($_GET['BackURL'])) Session::set("BackURL", $_GET['BackURL']);
 
@@ -105,7 +107,7 @@ class SSPSecurity extends Controller {
      * @see SimpleSAML_Auth_Simple->logout()
      */
     public function logout() {
-        $this->forceSSL();
+        self::force_ssl();
         
         $auth = SSPAuthFactory::get_authenticator();
         
@@ -115,15 +117,15 @@ class SSPSecurity extends Controller {
     }
 
     /**
-     * Log the currently logged in user out of the local Silverstripe website.
+     * Log the currently logged in user out of the local SilverStripe website.
      * This function should only be called after logging out of the identity provider.
      *
      * @see logout()
      */
     public function loggedout() {
-        $this->forceSSL();
+        self::force_ssl();
         
-        //Log out Silverstripe members
+        //Log out SilverStripe members
         if($member = Member::currentUser()) {
             $member->logout();
         }
@@ -137,17 +139,51 @@ class SSPSecurity extends Controller {
     
         return $this->redirect(str_replace('https', 'http', Director::absoluteBaseURL()));
     }
-    
+
+    /**
+
+     * Attempt to passively authenticate the user with the identity provider, then SilverStripe.
+     * 
+     * If the user is not authenticated in SilverStripe but is on the identity provider, this will 
+     * passively authenticate them in SilverStripe and redirect them to the current page. If the 
+     * user is already authenticated in SilverStripe this function returns nothing.
+     * 
+     * Passive authentication is not enabled by default and an explicit call to 'SSPSecurity::passive_login()'
+     * needs to be added to your 'Page_Controller->init()' function.
+     * 
+     * Please note that passive login only works with the default SSPAuthenticator. Currently it
+     * is not possible to specify a custom SSPAuthenticator on demand.
+     * 
+     * @see SSPSecurity->login()
+     */
+    public static function passive_login() {
+        self::force_ssl();
+        
+        $auth = self::get_authenticator();
+        
+        $attempted = Session::get('ssp_passive_attempted');
+        
+        if (!$auth->isAuthenticated() && !isset($attempted)) {
+            Session::set('ssp_passive_attempted', 1);
+            $auth->login(array(
+                'isPassive' => TRUE,
+                'ErrorURL' => $_SERVER['REQUEST_URI'],
+                'ReturnTo' => '/Security/login',
+                'ReturnCallback' => $auth->loginComplete()
+            ));
+        }
+    }
+
     /**
      * Redirects the user to the identity provider portal for login
      */
     public function LoginForm() {
-        $this->forceSSL();
+        $self::force_ssl();
         
         if(isset($_SERVER['HTTP_REFERER'])) Session::set("BackURL", $_SERVER['HTTP_REFERER']);
-        
-        $auth = SSPAuthFactory::get_authenticator();
-        
+
+		$auth = SSPAuthFactory::get_authenticator();
+
         $auth->login(array(
             'ForceAuthn' => TRUE,
             'ReturnTo' => '/Security/login',
@@ -158,8 +194,8 @@ class SSPSecurity extends Controller {
     /**
      * Forces HTTPS mode if set in the configuration
      */
-    private function forceSSL() {
-        $mode = $this->config()->force_ssl;
+    private static function force_ssl() {
+        $mode = self::config()->force_ssl;
         
         if(!is_bool($mode)) {
             user_error("Expected boolean in SSPSecurity::force_ssl", E_USER_ERROR);
